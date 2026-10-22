@@ -111,3 +111,7 @@ This produces `GameSorter.exe` next to `build.ps1`.
 | `src/GameSorter.cs` | The app: scanning, Steam matching, update detection, UI |
 | `src/PlayniteExtension/GameSorter.psm1` | The Playnite side that applies changes |
 | `build.ps1` | Builds the exe (and its icon) |
+
+## License
+
+[MIT](LICENSE)
