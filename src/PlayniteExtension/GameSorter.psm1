@@ -1,8 +1,3 @@
-﻿# Game Sorter - Playnite side.
-# GameSorter.exe scans your game folders and writes the changes to
-# %APPDATA%\GameSorter\pending.json. This applies them when Playnite starts
-# and writes what happened to result.json so the app can show it.
-
 $script:SteamPluginId = [guid]'cb91dfc9-b977-43bf-8e70-55f46e410fab'
 $script:DataDir = Join-Path $env:APPDATA 'GameSorter'
 
@@ -25,8 +20,6 @@ function Invoke-GameSorterMenu {
     Invoke-GameSorterApply $true
 }
 
-# ---------------------------------------------------------------- helpers ---
-
 function Get-NormName([string]$s) {
     if (-not $s) { return '' }
     return $s.ToLowerInvariant() -replace '&|\band\b', '' -replace '[^a-z0-9]', ''
@@ -37,7 +30,6 @@ function Get-SortingName([string]$name) {
     return $null
 }
 
-# Find an item (genre, category, source...) by name, or create it.
 function Get-OrAdd($collection, [string]$name) {
     $hit = $collection | Where-Object { $_.Name -eq $name } | Select-Object -First 1
     if ($hit) { return $hit }
@@ -131,7 +123,6 @@ function Update-Categories($lines, $counts) {
         $src = if ($g.SourceId -ne [guid]::Empty) { $s = $db.Sources.Get($g.SourceId); if ($s) { $s.Name } } else { $null }
         $cats = @(if ($src -eq 'PC Folder') { 'PC Folder Games' } elseif ($src) { "$src Games" } else { 'Other Games' })
         if ($g.Name -match '(?i)\bdemo\b|playtest') { $cats += 'Demos' }
-        # (no 'if' expression here: PowerShell would unwrap a one-item list)
         $ids = $g.CategoryIds
         if ($null -eq $ids) { $ids = New-Object 'System.Collections.Generic.List[Guid]' }
         $changed = $false
@@ -140,8 +131,6 @@ function Update-Categories($lines, $counts) {
       } catch { $counts.errors++; $lines.Add("ERROR       sorting $($g.Name) into a category: $($_.Exception.Message)") }
     }
 }
-
-# ------------------------------------------------------------------ apply ---
 
 function Invoke-ApplyOne($e, $source, $pc, $lines, $counts) {
     $db = $PlayniteApi.Database

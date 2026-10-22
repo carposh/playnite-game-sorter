@@ -1,10 +1,3 @@
-﻿// Game Sorter for Playnite
-// Pick your game folders, press Scan & Sync. Every sub-folder is treated as one
-// game: the real game exe is found, the game is identified on Steam (name,
-// cover, background, icon, details), and the result is handed to Playnite.
-// Running it again detects new games, newer versions (new folder or changed
-// files) and deleted games, and updates Playnite to match.
-
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -45,8 +38,6 @@ namespace GameSorter
             var args = Environment.GetCommandLineArgs();
             if (args.Length >= 4 && args[1] == "--dry-run")
             {
-                // GameSorter.exe --dry-run <log file> <folder> [folder...]
-                // Shows what a sync would do without changing anything.
                 var sb = new StringBuilder();
                 new Syncer(l => { lock (sb) sb.AppendLine(l); }, (a, b, t) => { }, q => false)
                     .Run(args.Skip(3).ToList(), false, true);
@@ -55,8 +46,6 @@ namespace GameSorter
             }
             if (args.Length >= 4 && args[1] == "--sync")
             {
-                // GameSorter.exe --sync <log file> <folder> [folder...]
-                // Full sync without the window (restarts Playnite to apply).
                 var sb = new StringBuilder();
                 try
                 {
@@ -70,8 +59,6 @@ namespace GameSorter
             Application.Run(new MainForm());
         }
     }
-
-    // ------------------------------------------------------------- paths ---
 
     static class Paths
     {
@@ -109,8 +96,6 @@ namespace GameSorter
         }
     }
 
-    // -------------------------------------------------------------- json ---
-
     static class Json
     {
         static JavaScriptSerializer Make()
@@ -145,8 +130,6 @@ namespace GameSorter
         }
     }
 
-    // --------------------------------------------------------------- web ---
-
     static class Web
     {
         static WebClient Client()
@@ -178,8 +161,6 @@ namespace GameSorter
             return false;
         }
     }
-
-    // ------------------------------------------------------------ models ---
 
     class FoundGame
     {
@@ -242,19 +223,13 @@ namespace GameSorter
         }
     }
 
-    // ----------------------------------------------------------- scanner ---
-
     static class Scanner
     {
         const RegexOptions I = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
 
-        // Exes that are never the game itself.
         static readonly Regex BadExe = new Regex(@"redist|crash|unins|setup|install|dxweb|oalinst|vcredist|vc_redist|dotnet|ndp\d|physx|createdump|crs-|verify|lumaplay|\.console$|workshoputility|qwentts|unitywebbrowser|epiconlineservices|^launcher$|^ue4prereq|^cefsharp|helper|reporter|^python|^7z|^notification", I);
-        // Folders that never contain the game exe.
         static readonly Regex BadDir = new Regex(@"^(_?commonredist|_?common redist|~common redist|_?redist|redist|directx|_uninstall|_verify|_lumaplay|_steam\d+|engine|__installer|support|prereq.*|.*_data|monobleedingedge|crashpad|tools?)$", I);
-        // Folder names that say nothing about the game; look one level up instead.
         static readonly Regex GenericDir = new Regex(@"^(game|bin|binaries|win64|win32|x64|windows|release|shipping|app|data|build|.*-steamgg\.net)$", I);
-        // Top-level folders that are not games (when a whole drive is chosen).
         static readonly Regex NotGameRoot = new Regex(@"^(saves?|steamlibrary|steamapps|windowsapps|xboxgames|wpsystem|program files.*|\$recycle\.bin|system volume information|windows|users|programdata|perflogs|recovery|msocache)$", I);
         static readonly Regex Shipping = new Regex(@"-(win64|win32|wingdk)-shipping$", I);
 
@@ -331,8 +306,6 @@ namespace GameSorter
                     string bas = Path.GetFileNameWithoutExtension(path);
                     if (BadExe.IsMatch(bas)) continue;
                     double score = 0.0;
-                    // Unreal games have a small launcher at the top and the real exe in
-                    // Binaries\Win64; the launcher is the one to start.
                     if (Shipping.IsMatch(bas)) { bas = Shipping.Replace(bas, ""); score -= 2; }
                     string parent = Path.GetFileName(Path.GetDirectoryName(path));
                     score += 3 * Similarity(bas, CleanName(parent));
@@ -353,8 +326,6 @@ namespace GameSorter
             return best;
         }
 
-        // Names to try on Steam: the folder holding the exe (or its first
-        // non-generic parent), then each folder above it up to the game folder.
         public static List<string> NameCandidates(string root, string exe)
         {
             var names = new List<string>();
@@ -374,8 +345,6 @@ namespace GameSorter
             return names;
         }
 
-        // Version from the folder names (v1.2.3 / Build.ddMMyyyy) and a
-        // fingerprint of the game files so in-place updates are noticed too.
         public static void ReadVersion(FoundGame g)
         {
             string rel = g.Exe.Substring(Math.Max(0, (Path.GetDirectoryName(g.Folder) ?? "").Length));
@@ -411,7 +380,6 @@ namespace GameSorter
             return Regex.IsMatch(Path.GetFileName(folder), @"\(\d+\)|^new folder", I);
         }
 
-        // > 0 when a is newer than b.
         public static int CompareNewness(FoundGame a, FoundGame b)
         {
             if (a.Ver != null && b.Ver != null && a.Ver != b.Ver) return a.Ver.CompareTo(b.Ver);
@@ -421,8 +389,6 @@ namespace GameSorter
             return LooksLikeCopy(b.Folder).CompareTo(LooksLikeCopy(a.Folder));
         }
     }
-
-    // ------------------------------------------------------------- steam ---
 
     static class Steam
     {
@@ -443,7 +409,6 @@ namespace GameSorter
                     int id;
                     if (name == null || !int.TryParse(Json.Str(it, "id"), out id)) continue;
                     double score = 0.0;
-                    // earlier names (the folder holding the exe) are trusted more than later ones
                     for (int k = 0; k < names.Count; k++) score = Math.Max(score, Scanner.Similarity(names[k], name) * (1.0 - 0.06 * k));
                     if (!wantDemo && Regex.IsMatch(name, @"\b(demo|soundtrack|ost|playtest|prologue|dlc)\b", I)) score -= 0.15;
                     if (score > bestScore) { bestScore = score; best = new MatchEntry { AppId = id, Name = name, Score = Math.Round(score, 2) }; }
@@ -497,8 +462,6 @@ namespace GameSorter
         }
     }
 
-    // -------------------------------------------------------------- sync ---
-
     class Syncer
     {
         readonly Action<string> log;
@@ -524,7 +487,6 @@ namespace GameSorter
             state.AutoRestart = autoRestart;
             var report = new List<string>();
 
-            // ---- 1. scan folders ----
             var found = new List<FoundGame>();
             var noExe = new List<string>();
             var dirs = new List<string>();
@@ -545,7 +507,6 @@ namespace GameSorter
                 found.Add(g);
             }
 
-            // ---- 2. identify each game ----
             log("Identifying " + found.Count + " games on Steam...");
             for (int i = 0; i < found.Count; i++)
             {
@@ -562,7 +523,6 @@ namespace GameSorter
                 else { g.Name = g.Names[0]; g.Key = "local:" + Scanner.Norm(g.Names[0]); }
             }
 
-            // ---- 3. work out what changed ----
             var entries = new List<Dictionary<string, object>>();
             var toFetch = new List<KeyValuePair<FoundGame, Dictionary<string, object>>>();
             int unchanged = 0;
@@ -600,12 +560,11 @@ namespace GameSorter
                 state.Games[grp.Key] = new GameState { Name = newest.Name, Folder = newest.Folder, Exe = newest.Exe, Version = newest.VersionText, Fingerprint = newest.Fingerprint, AppId = newest.AppId };
             }
 
-            // Games from an earlier run whose folder is gone now.
             var foundKeys = new HashSet<string>(groups.Select(g => g.Key));
             foreach (var kv in state.Games.ToList())
             {
                 if (foundKeys.Contains(kv.Key)) continue;
-                if (!roots.Any(r => IsUnder(kv.Value.Folder, r))) continue;   // folder not scanned this time
+                if (!roots.Any(r => IsUnder(kv.Value.Folder, r))) continue;
                 if (File.Exists(kv.Value.Exe)) continue;
                 var e = new Dictionary<string, object>();
                 e["key"] = kv.Key; e["action"] = "missing"; e["name"] = kv.Value.Name;
@@ -616,7 +575,6 @@ namespace GameSorter
 
             foreach (var d in noExe) report.Add("NO GAME EXE " + d + "  - nothing playable inside (unfinished download/extract?)");
 
-            // ---- 4. download names, art and details for new games ----
             for (int i = 0; i < toFetch.Count; i++)
             {
                 var g = toFetch[i].Key;
@@ -650,7 +608,6 @@ namespace GameSorter
                 entries.Count(x => (string)x["action"] == "update") + " updated, " +
                 entries.Count(x => (string)x["action"] == "missing") + " missing, " + unchanged + " unchanged.");
 
-            // ---- 5. hand the changes to Playnite ----
             Dictionary<string, object> result = null;
             if (dryRun)
             {
@@ -670,7 +627,6 @@ namespace GameSorter
                 result = ApplyInPlaynite(runId, autoRestart);
             }
 
-            // ---- 6. report ----
             log("");
             log("==================== REPORT ====================");
             if (result != null)
@@ -723,7 +679,6 @@ namespace GameSorter
             catch { return null; }
         }
 
-        // Keep changes from an earlier run that Playnite hasn't applied yet.
         static void WritePending(string runId, List<Dictionary<string, object>> entries)
         {
             Directory.CreateDirectory(Paths.Data);
@@ -744,8 +699,6 @@ namespace GameSorter
             File.WriteAllText(Paths.Pending, Json.Write(job), new UTF8Encoding(false));
         }
 
-        // True when the Playnite helper inside this exe is newer than the
-        // installed one, so Playnite should be restarted to pick it up.
         static bool ExtensionOutdated()
         {
             try
@@ -774,8 +727,6 @@ namespace GameSorter
             }
         }
 
-        // Copy Playnite's library database (not the images) while Playnite is
-        // closed, so a sync can always be undone. Keeps the last 5.
         void BackupLibrary()
         {
             try
@@ -845,14 +796,12 @@ namespace GameSorter
                     var r = Json.Parse(File.ReadAllText(Paths.Result, Encoding.UTF8));
                     if (Json.Str(r, "runId") == runId) return r as Dictionary<string, object>;
                 }
-                catch { }   // still being written
+                catch { }
             }
             log("Playnite didn't report back within 5 minutes. The changes stay queued and apply the next time Playnite starts.");
             return null;
         }
     }
-
-    // -------------------------------------------------------------- form ---
 
     class MainForm : Form
     {
@@ -943,7 +892,7 @@ namespace GameSorter
             {
                 if (dlg.ShowDialog(this) != DialogResult.OK) return;
                 var path = dlg.SelectedPath.TrimEnd('\\');
-                if (path.Length == 2) path += "\\";   // drive root
+                if (path.Length == 2) path += "\\";
                 foreach (string r in lstRoots.Items) if (string.Equals(r, path, StringComparison.OrdinalIgnoreCase)) return;
                 lstRoots.Items.Add(path);
                 SaveSettings();
