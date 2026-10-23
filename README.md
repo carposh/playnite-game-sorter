@@ -8,13 +8,28 @@ what changed.
 
 ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue) ![playnite](https://img.shields.io/badge/Playnite-10.x-purple)
 
-## Download
+## Download & install
 
-Grab `GameSorter.exe` from the [latest release](../../releases/latest). It's a single
-file with nothing to install.
+1. Download `GameSorter.exe` from the [latest release](../../releases/latest).
+2. Run it. It asks to install itself: choose **Yes** and it's added to your Start menu and
+   desktop, and listed in Windows' **Installed apps** (no admin rights needed). Choose
+   **No** to just run it once without installing.
 
 > Windows SmartScreen may say "Windows protected your PC" because the exe isn't
 > code-signed. Click **More info → Run anyway**.
+
+### Updates
+
+Game Sorter checks for a new version every time it opens (you can also press **Check
+for updates**). If one is available it asks first, then downloads it, swaps it in for the
+installed version and restarts. Running a newer `GameSorter.exe` you downloaded yourself
+also replaces the installed version.
+
+### Uninstall
+
+Uninstall it from **Settings → Apps → Installed apps → Game Sorter for Playnite**. This
+removes the app, its shortcuts and its Playnite helper. Your games stay in Playnite, and
+your settings, logs and library backups stay in `%APPDATA%\GameSorter`.
 
 ## Requirements
 
@@ -80,6 +95,11 @@ GameSorter.exe --dry-run "%TEMP%\gamesorter.txt" "D:\Games" "E:\More Games"
 
 :: Run a full sync without the window (useful with Task Scheduler)
 GameSorter.exe --sync "%TEMP%\gamesorter.txt" "D:\Games"
+
+:: Install, update to the latest release, or uninstall without any prompts
+GameSorter.exe --install
+GameSorter.exe --update
+GameSorter.exe --uninstall --quiet
 ```
 
 ## How it works

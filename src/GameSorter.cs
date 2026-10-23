@@ -18,8 +18,8 @@ using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Game Sorter for Playnite")]
 [assembly: AssemblyProduct("Game Sorter")]
-[assembly: AssemblyVersion("2.1.0.0")]
-[assembly: AssemblyFileVersion("2.1.0.0")]
+[assembly: AssemblyVersion("2.2.0.0")]
+[assembly: AssemblyFileVersion("2.2.0.0")]
 
 namespace GameSorter
 {
@@ -56,7 +56,196 @@ namespace GameSorter
                 File.WriteAllText(args[2], sb.ToString(), new UTF8Encoding(true));
                 return;
             }
+            string flag = args.Length > 1 ? args[1] : "";
+            bool quiet = args.Contains("--quiet");
+            if (flag == "--uninstall") { Installer.Uninstall(quiet); return; }
+            if (flag == "--install") { Installer.InstallFrom(Installer.Self, Installer.InstalledVersion() == null); return; }
+            if (flag == "--update")
+            {
+                var latest = Installer.CheckLatest();
+                string error;
+                if (latest != null && latest.IsNewer) Installer.DownloadAndInstall(latest, out error);
+                return;
+            }
+            Installer.CleanupOld();
+            if (!Installer.IsInstalledCopy && !Installer.OfferInstall()) return;
             Application.Run(new MainForm());
+        }
+    }
+
+    class UpdateInfo
+    {
+        public Version Version;
+        public string Url, Notes;
+        public bool IsNewer { get { return Installer.Normalize(Version) > Installer.Normalize(Installer.Current); } }
+    }
+
+    static class Installer
+    {
+        public const string Repo = "carposh/playnite-game-sorter";
+        const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\GameSorter";
+        public static readonly string Dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "GameSorter");
+        public static readonly string Exe = Path.Combine(Dir, "GameSorter.exe");
+        static readonly string StartMenuLink = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Game Sorter.lnk");
+        static readonly string DesktopLink = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Game Sorter.lnk");
+
+        public static Version Current { get { return Assembly.GetExecutingAssembly().GetName().Version; } }
+        public static string Self { get { return Assembly.GetExecutingAssembly().Location; } }
+
+        public static Version Normalize(Version v)
+        {
+            return v == null ? new Version(0, 0, 0, 0) : new Version(v.Major, v.Minor, Math.Max(0, v.Build), Math.Max(0, v.Revision));
+        }
+
+        static bool SamePath(string a, string b)
+        {
+            return string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static bool IsInstalledCopy { get { return SamePath(Self, Exe); } }
+
+        public static Version InstalledVersion()
+        {
+            try { return File.Exists(Exe) ? AssemblyName.GetAssemblyName(Exe).Version : null; }
+            catch { return null; }
+        }
+
+        public static void CleanupOld()
+        {
+            try { foreach (var f in Directory.GetFiles(Dir, "*.old")) try { File.Delete(f); } catch { } }
+            catch { }
+        }
+
+        public static void Launch()
+        {
+            Process.Start(new ProcessStartInfo(Exe) { WorkingDirectory = Dir });
+        }
+
+        public static bool OfferInstall()
+        {
+            var installed = InstalledVersion();
+            var current = Normalize(Current);
+            if (installed != null && Normalize(installed) >= current) { Launch(); return false; }
+            string question = installed == null
+                ? "Install Game Sorter on this PC?\n\nIt will be added to the Start menu and your desktop, and listed in Windows' Installed apps so you can uninstall it any time. Updates will install themselves.\n\nChoose No to just run it this once without installing."
+                : "Game Sorter " + installed.ToString(3) + " is installed. Replace it with this version (" + current.ToString(3) + ")?\n\nChoose No to just run this copy without installing.";
+            if (MessageBox.Show(question, "Game Sorter", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return true;
+            try { InstallFrom(Self, installed == null); }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Couldn't install Game Sorter: " + ex.Message + "\n\nIt will run from where it is instead.", "Game Sorter", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return true;
+            }
+            Launch();
+            return false;
+        }
+
+        public static void InstallFrom(string source, bool createDesktopShortcut)
+        {
+            Directory.CreateDirectory(Dir);
+            if (!SamePath(source, Exe))
+            {
+                if (File.Exists(Exe))
+                {
+                    try { File.Delete(Exe); }
+                    catch { File.Move(Exe, Path.Combine(Dir, "GameSorter." + Guid.NewGuid().ToString("N") + ".old")); }
+                }
+                File.Copy(source, Exe, true);
+            }
+            Register();
+            CreateShortcut(StartMenuLink);
+            if (createDesktopShortcut || File.Exists(DesktopLink)) CreateShortcut(DesktopLink);
+        }
+
+        static void Register()
+        {
+            using (var k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(UninstallKey))
+            {
+                var version = Normalize(AssemblyName.GetAssemblyName(Exe).Version).ToString(3);
+                k.SetValue("DisplayName", "Game Sorter for Playnite");
+                k.SetValue("DisplayVersion", version);
+                k.SetValue("Publisher", "carposh");
+                k.SetValue("DisplayIcon", Exe + ",0");
+                k.SetValue("InstallLocation", Dir);
+                k.SetValue("UninstallString", "\"" + Exe + "\" --uninstall");
+                k.SetValue("QuietUninstallString", "\"" + Exe + "\" --uninstall --quiet");
+                k.SetValue("URLInfoAbout", "https://github.com/" + Repo);
+                k.SetValue("InstallDate", DateTime.Now.ToString("yyyyMMdd"));
+                k.SetValue("EstimatedSize", (int)Math.Max(1, new FileInfo(Exe).Length / 1024), Microsoft.Win32.RegistryValueKind.DWord);
+                k.SetValue("NoModify", 1, Microsoft.Win32.RegistryValueKind.DWord);
+                k.SetValue("NoRepair", 1, Microsoft.Win32.RegistryValueKind.DWord);
+            }
+        }
+
+        static void CreateShortcut(string linkPath)
+        {
+            var shellType = Type.GetTypeFromProgID("WScript.Shell");
+            object shell = Activator.CreateInstance(shellType);
+            try
+            {
+                object link = shellType.InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, shell, new object[] { linkPath });
+                var linkType = link.GetType();
+                linkType.InvokeMember("TargetPath", BindingFlags.SetProperty, null, link, new object[] { Exe });
+                linkType.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, link, new object[] { Dir });
+                linkType.InvokeMember("IconLocation", BindingFlags.SetProperty, null, link, new object[] { Exe + ",0" });
+                linkType.InvokeMember("Description", BindingFlags.SetProperty, null, link, new object[] { "Add and update your PC games in Playnite" });
+                linkType.InvokeMember("Save", BindingFlags.InvokeMethod, null, link, null);
+                Marshal.FinalReleaseComObject(link);
+            }
+            finally { Marshal.FinalReleaseComObject(shell); }
+        }
+
+        public static void Uninstall(bool quiet)
+        {
+            if (!quiet && MessageBox.Show("Uninstall Game Sorter?\n\nYour games stay in Playnite. Your settings, logs and Playnite library backups are kept in " + Paths.Data + ".",
+                "Game Sorter", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            foreach (var link in new[] { StartMenuLink, DesktopLink }) try { File.Delete(link); } catch { }
+            try { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(UninstallKey, false); } catch { }
+            try { if (Directory.Exists(Paths.Extension)) Directory.Delete(Paths.Extension, true); } catch { }
+            try
+            {
+                Process.Start(new ProcessStartInfo("cmd.exe", "/c ping 127.0.0.1 -n 3 > nul & rmdir /s /q \"" + Dir + "\"")
+                {
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    WorkingDirectory = Path.GetTempPath()
+                });
+            }
+            catch { }
+            if (!quiet) MessageBox.Show("Game Sorter has been uninstalled.", "Game Sorter", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        public static UpdateInfo CheckLatest()
+        {
+            var release = Json.Parse(Web.GetString("https://api.github.com/repos/" + Repo + "/releases/latest"));
+            if (release == null) return null;
+            Version version;
+            var tag = (Json.Str(release, "tag_name") ?? "").TrimStart('v', 'V');
+            if (!Version.TryParse(tag, out version)) return null;
+            foreach (var asset in Json.Arr(release, "assets"))
+            {
+                if (string.Equals(Json.Str(asset, "name"), "GameSorter.exe", StringComparison.OrdinalIgnoreCase))
+                    return new UpdateInfo { Version = version, Url = Json.Str(asset, "browser_download_url"), Notes = Json.Str(release, "body") };
+            }
+            return null;
+        }
+
+        public static bool DownloadAndInstall(UpdateInfo update, out string error)
+        {
+            error = null;
+            var tmp = Path.Combine(Path.GetTempPath(), "GameSorter-update-" + Normalize(update.Version).ToString(3) + ".exe");
+            try
+            {
+                if (!Web.Download(update.Url, tmp)) { error = "The download from GitHub failed."; return false; }
+                Version got;
+                try { got = AssemblyName.GetAssemblyName(tmp).Version; }
+                catch { error = "The downloaded file isn't a valid Game Sorter exe."; return false; }
+                if (Normalize(got) != Normalize(update.Version)) { error = "The downloaded file is version " + got + ", expected " + update.Version + "."; return false; }
+                InstallFrom(tmp, InstalledVersion() == null);
+                return true;
+            }
+            catch (Exception ex) { error = ex.Message; return false; }
+            finally { try { File.Delete(tmp); } catch { } }
         }
     }
 
@@ -806,7 +995,7 @@ namespace GameSorter
     class MainForm : Form
     {
         readonly ListBox lstRoots = new ListBox();
-        readonly Button btnAdd = new Button(), btnChange = new Button(), btnRemove = new Button(), btnRun = new Button(), btnLogs = new Button();
+        readonly Button btnAdd = new Button(), btnChange = new Button(), btnRemove = new Button(), btnRun = new Button(), btnLogs = new Button(), btnUpdate = new Button();
         readonly CheckBox chkRestart = new CheckBox();
         readonly ProgressBar bar = new ProgressBar();
         readonly Label lblStatus = new Label();
@@ -817,7 +1006,7 @@ namespace GameSorter
 
         public MainForm()
         {
-            Text = "Game Sorter for Playnite";
+            Text = "Game Sorter for Playnite " + Installer.Normalize(Installer.Current).ToString(3);
             Font = new Font("Segoe UI", 9.5f);
             AutoScaleMode = AutoScaleMode.Dpi;
             ClientSize = new Size(900, 650);
@@ -863,7 +1052,8 @@ namespace GameSorter
             top.Controls.Add(chkRestart, 0, 2);
             top.SetColumnSpan(chkRestart, 2);
 
-            var actions = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 3, Margin = new Padding(0) };
+            var actions = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 4, Margin = new Padding(0) };
+            actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -879,6 +1069,11 @@ namespace GameSorter
             btnLogs.Click += (s, e) => { Directory.CreateDirectory(Paths.Logs); Process.Start("explorer.exe", "\"" + Paths.Logs + "\""); };
             actions.Controls.Add(btnLogs, 1, 0);
 
+            btnUpdate.Text = "Check for updates";
+            btnUpdate.Size = new Size(160, 42);
+            btnUpdate.Click += (s, e) => CheckForUpdates(false);
+            actions.Controls.Add(btnUpdate, 2, 0);
+
             var progressBox = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, RowCount = 2, ColumnCount = 1, Margin = new Padding(8, 0, 3, 0) };
             progressBox.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             lblStatus.Dock = DockStyle.Fill;
@@ -888,7 +1083,7 @@ namespace GameSorter
             bar.Height = 20;
             progressBox.Controls.Add(lblStatus, 0, 0);
             progressBox.Controls.Add(bar, 0, 1);
-            actions.Controls.Add(progressBox, 2, 0);
+            actions.Controls.Add(progressBox, 3, 0);
 
             top.Controls.Add(actions, 0, 3);
             top.SetColumnSpan(actions, 2);
@@ -915,7 +1110,7 @@ namespace GameSorter
             Log("2. Press Scan & Sync. New games are added to Playnite with names, covers and details;");
             Log("   run it again any time to pick up new games, newer versions and deleted games.");
             Log("");
-            Shown += (s, e) => { if (lstRoots.Items.Count == 0) AddFolder(); };
+            Shown += (s, e) => { CheckForUpdates(true); if (lstRoots.Items.Count == 0) AddFolder(); };
         }
 
         string PickFolder(string startAt)
@@ -1046,10 +1241,81 @@ namespace GameSorter
             t.Start();
         }
 
+        void CheckForUpdates(bool silent)
+        {
+            if (busy) return;
+            if (!silent) { btnUpdate.Enabled = false; lblStatus.Text = "Checking for updates..."; }
+            var t = new Thread(() =>
+            {
+                UpdateInfo update = null;
+                try { update = Installer.CheckLatest(); } catch { }
+                try { BeginInvoke(new Action(() => OnUpdateChecked(update, silent))); } catch { }
+            });
+            t.IsBackground = true;
+            t.Start();
+        }
+
+        void OnUpdateChecked(UpdateInfo update, bool silent)
+        {
+            if (!silent) { btnUpdate.Enabled = !busy; lblStatus.Text = ""; }
+            if (update == null)
+            {
+                if (!silent) MessageBox.Show(this, "Couldn't check for updates. Check your internet connection and try again.", "Game Sorter", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            string current = Installer.Normalize(Installer.Current).ToString(3);
+            string latest = Installer.Normalize(update.Version).ToString(3);
+            if (!update.IsNewer)
+            {
+                if (!silent) MessageBox.Show(this, "You have the latest version (" + current + ").", "Game Sorter", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            if (busy)
+            {
+                Log("Game Sorter " + latest + " is available. Press Check for updates when the sync is done to install it.");
+                return;
+            }
+            string notes = (update.Notes ?? "").Trim();
+            if (notes.Length > 700) notes = notes.Substring(0, 700) + "...";
+            var answer = MessageBox.Show(this, "Game Sorter " + latest + " is available (you have " + current + ").\n\n" + notes + "\n\nUpdate now? Game Sorter will restart.",
+                "Update available", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+            if (answer == DialogResult.Yes) InstallUpdate(update);
+            else Log("Update " + latest + " skipped for now. Press Check for updates to install it later.");
+        }
+
+        void InstallUpdate(UpdateInfo update)
+        {
+            SetBusy(true);
+            string latest = Installer.Normalize(update.Version).ToString(3);
+            lblStatus.Text = "Downloading Game Sorter " + latest + "...";
+            Log("Downloading Game Sorter " + latest + "...");
+            var t = new Thread(() =>
+            {
+                string error;
+                bool ok = Installer.DownloadAndInstall(update, out error);
+                BeginInvoke(new Action(() =>
+                {
+                    if (ok)
+                    {
+                        Log("Updated to " + latest + ". Restarting...");
+                        try { Installer.Launch(); } catch { }
+                        Close();
+                        return;
+                    }
+                    SetBusy(false);
+                    lblStatus.Text = "";
+                    Log("Update failed: " + error);
+                    MessageBox.Show(this, "The update couldn't be installed:\n\n" + error, "Game Sorter", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }));
+            });
+            t.IsBackground = true;
+            t.Start();
+        }
+
         void SetBusy(bool isBusy)
         {
             busy = isBusy;
-            btnRun.Enabled = chkRestart.Enabled = !isBusy;
+            btnRun.Enabled = chkRestart.Enabled = btnUpdate.Enabled = !isBusy;
             UpdateButtons();
             UseWaitCursor = isBusy;
         }
