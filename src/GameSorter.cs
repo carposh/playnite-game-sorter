@@ -3,7 +3,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
+using System.Drawing.Text;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -18,8 +20,8 @@ using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Game Sorter for Playnite")]
 [assembly: AssemblyProduct("Game Sorter")]
-[assembly: AssemblyVersion("2.2.0.0")]
-[assembly: AssemblyFileVersion("2.2.0.0")]
+[assembly: AssemblyVersion("2.3.0.0")]
+[assembly: AssemblyFileVersion("2.3.0.0")]
 
 namespace GameSorter
 {
@@ -992,112 +994,333 @@ namespace GameSorter
         }
     }
 
+    static class Theme
+    {
+        public static readonly Color Background = Color.FromArgb(245, 244, 238);
+        public static readonly Color Surface = Color.FromArgb(255, 255, 255);
+        public static readonly Color Border = Color.FromArgb(222, 219, 208);
+        public static readonly Color Text = Color.FromArgb(31, 30, 29);
+        public static readonly Color Muted = Color.FromArgb(115, 112, 105);
+        public static readonly Color LogText = Color.FromArgb(62, 60, 56);
+        public static readonly Color Accent = Color.FromArgb(193, 95, 60);
+        public static readonly Color AccentHover = Color.FromArgb(172, 82, 50);
+        public static readonly Color AccentPressed = Color.FromArgb(150, 70, 42);
+        public static readonly Color Subtle = Color.FromArgb(240, 238, 231);
+        public static readonly Color SubtlePressed = Color.FromArgb(230, 227, 218);
+        public static readonly Color Selection = Color.FromArgb(246, 233, 225);
+        public static readonly Color Track = Color.FromArgb(232, 229, 220);
+        public static readonly Color Disabled = Color.FromArgb(226, 223, 214);
+
+        static readonly HashSet<string> Installed = new HashSet<string>(new InstalledFontCollection().Families.Select(f => f.Name), StringComparer.OrdinalIgnoreCase);
+
+        static string Pick(params string[] names)
+        {
+            foreach (var n in names) if (Installed.Contains(n)) return n;
+            return names[names.Length - 1];
+        }
+
+        public static readonly string SerifDisplay = Pick("Sitka Display", "Georgia");
+        public static readonly string SerifHeading = Pick("Sitka Subheading", "Georgia");
+        public static readonly string Sans = Pick("Segoe UI Variable Text", "Segoe UI");
+        public static readonly string SansStrong = Pick("Segoe UI Variable Text Semibold", "Segoe UI Semibold", "Segoe UI");
+        public static readonly string Mono = Pick("Cascadia Mono", "Consolas");
+        public static readonly string Icons = Pick("Segoe Fluent Icons", "Segoe MDL2 Assets");
+
+        public static GraphicsPath Rounded(RectangleF r, float radius)
+        {
+            float d = radius * 2;
+            var p = new GraphicsPath();
+            p.AddArc(r.X, r.Y, d, d, 180, 90);
+            p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            p.CloseFigure();
+            return p;
+        }
+
+        public static Label SectionTitle(string text)
+        {
+            return new Label { Text = text, AutoSize = true, Font = new Font(SerifHeading, 14f), ForeColor = Text, BackColor = Surface, Margin = new Padding(0) };
+        }
+
+        public static Label Hint(string text)
+        {
+            return new Label { Text = text, AutoSize = true, Font = new Font(Sans, 9.5f), ForeColor = Muted, BackColor = Surface, Margin = new Padding(1, 3, 0, 0) };
+        }
+    }
+
+    class Card : Panel
+    {
+        public float Radius = 12;
+        public Color Fill = Theme.Surface;
+
+        public Card()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
+            BackColor = Theme.Background;
+            Padding = new Padding(22, 18, 22, 20);
+            Margin = new Padding(0, 0, 0, 16);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using (var path = Theme.Rounded(new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f), Radius))
+            using (var fill = new SolidBrush(Fill))
+            using (var pen = new Pen(Theme.Border))
+            {
+                e.Graphics.FillPath(fill, path);
+                e.Graphics.DrawPath(pen, path);
+            }
+        }
+    }
+
+    class FlatButton : Control
+    {
+        readonly bool primary;
+        bool hover, pressed;
+
+        public FlatButton(string text, bool primary)
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint | ControlStyles.Selectable, true);
+            this.primary = primary;
+            Text = text;
+            Font = new Font(primary ? Theme.SansStrong : Theme.Sans, 10f);
+            Cursor = Cursors.Hand;
+            Size = new Size(140, 38);
+            TabStop = true;
+        }
+
+        protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { hover = false; pressed = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnMouseDown(MouseEventArgs e) { if (e.Button == MouseButtons.Left) { pressed = true; Focus(); Invalidate(); } base.OnMouseDown(e); }
+        protected override void OnMouseUp(MouseEventArgs e) { pressed = false; Invalidate(); base.OnMouseUp(e); }
+        protected override void OnEnabledChanged(EventArgs e) { Cursor = Enabled ? Cursors.Hand : Cursors.Default; Invalidate(); base.OnEnabledChanged(e); }
+        protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
+        protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
+        protected override void OnTextChanged(EventArgs e) { Invalidate(); base.OnTextChanged(e); }
+
+        protected override void OnKeyUp(KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Space || e.KeyCode == Keys.Enter) OnClick(EventArgs.Empty);
+            base.OnKeyUp(e);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.Clear(Parent != null ? Parent.BackColor : Theme.Background);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            Color fill, border, text;
+            if (!Enabled) { fill = primary ? Theme.Disabled : Theme.Surface; border = Theme.Disabled; text = Theme.Muted; }
+            else if (primary) { fill = pressed ? Theme.AccentPressed : hover ? Theme.AccentHover : Theme.Accent; border = fill; text = Color.White; }
+            else { fill = pressed ? Theme.SubtlePressed : hover ? Theme.Subtle : Theme.Surface; border = Theme.Border; text = Theme.Text; }
+            using (var path = Theme.Rounded(new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f), 8))
+            using (var brush = new SolidBrush(fill))
+            using (var pen = new Pen(border))
+            {
+                g.FillPath(brush, path);
+                g.DrawPath(pen, path);
+            }
+            if (Focused && ShowFocusCues)
+            {
+                using (var path = Theme.Rounded(new RectangleF(2.5f, 2.5f, Width - 5.5f, Height - 5.5f), 6))
+                using (var pen = new Pen(Color.FromArgb(110, primary ? Color.White : Theme.Text)))
+                    g.DrawPath(pen, path);
+            }
+            TextRenderer.DrawText(g, Text, Font, ClientRectangle, text, fill,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
+        }
+    }
+
+    class ThinProgress : Control
+    {
+        int current, max = 100;
+
+        public ThinProgress()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
+            Height = 6;
+        }
+
+        public int Maximum { get { return max; } set { max = Math.Max(1, value); current = Math.Min(current, max); Invalidate(); } }
+        public int Value { get { return current; } set { current = Math.Max(0, Math.Min(value, max)); Invalidate(); } }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.Clear(Parent != null ? Parent.BackColor : Theme.Background);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            float y = (Height - 4) / 2f;
+            using (var track = Theme.Rounded(new RectangleF(0, y, Width - 1, 4), 2))
+            using (var brush = new SolidBrush(Theme.Track))
+                g.FillPath(brush, track);
+            if (current <= 0) return;
+            float w = Math.Max(4, (Width - 1) * (float)current / max);
+            using (var fill = Theme.Rounded(new RectangleF(0, y, w, 4), 2))
+            using (var brush = new SolidBrush(Theme.Accent))
+                g.FillPath(brush, fill);
+        }
+    }
+
     class MainForm : Form
     {
+        [DllImport("dwmapi.dll")]
+        static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+
         readonly ListBox lstRoots = new ListBox();
-        readonly Button btnAdd = new Button(), btnChange = new Button(), btnRemove = new Button(), btnRun = new Button(), btnLogs = new Button(), btnUpdate = new Button();
+        readonly FlatButton btnAdd = new FlatButton("Add folder", false), btnChange = new FlatButton("Change", false), btnRemove = new FlatButton("Remove", false);
+        readonly FlatButton btnRun = new FlatButton("Scan & Sync", true), btnLogs = new FlatButton("Open logs", false), btnUpdate = new FlatButton("Check for updates", false);
         readonly CheckBox chkRestart = new CheckBox();
-        readonly ProgressBar bar = new ProgressBar();
+        readonly ThinProgress bar = new ThinProgress();
         readonly Label lblStatus = new Label();
         readonly TextBox txtLog = new TextBox();
         readonly StringBuilder logText = new StringBuilder();
+        readonly Font iconFont = new Font(Theme.Icons, 12f);
         AppState state;
         bool busy;
 
         public MainForm()
         {
-            Text = "Game Sorter for Playnite " + Installer.Normalize(Installer.Current).ToString(3);
-            Font = new Font("Segoe UI", 9.5f);
+            Text = "Game Sorter";
+            Font = new Font(Theme.Sans, 10f);
+            BackColor = Theme.Background;
+            ForeColor = Theme.Text;
             AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(900, 650);
-            MinimumSize = new Size(640, 480);
+            ClientSize = new Size(940, 740);
+            MinimumSize = new Size(720, 660);
             StartPosition = FormStartPosition.CenterScreen;
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
-            var top = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 2, Padding = new Padding(10, 8, 10, 8) };
-            top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(30, 22, 30, 26), BackColor = Theme.Background };
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 262));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-            var lbl = new Label { Text = "Game folders - every sub-folder inside is treated as one game (double-click a folder to change it):", AutoSize = true, Margin = new Padding(3, 3, 3, 6) };
-            top.Controls.Add(lbl, 0, 0);
-            top.SetColumnSpan(lbl, 2);
+            var header = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 2, RowCount = 2, BackColor = Theme.Background, Margin = new Padding(0, 0, 0, 18) };
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            var title = new Label { Text = "Game Sorter", AutoSize = true, Font = new Font(Theme.SerifDisplay, 26f), ForeColor = Theme.Text, Margin = new Padding(0) };
+            var subtitle = new Label { Text = "Bring every game on your PC into Playnite, with names, artwork and details.", AutoSize = true, Font = new Font(Theme.Sans, 10.5f), ForeColor = Theme.Muted, Margin = new Padding(2, 0, 0, 0) };
+            var version = new Label { Text = "Version " + Installer.Normalize(Installer.Current).ToString(3), AutoSize = true, Font = new Font(Theme.Sans, 9f), ForeColor = Theme.Muted, Anchor = AnchorStyles.Right | AnchorStyles.Bottom, Margin = new Padding(0, 0, 0, 8) };
+            header.Controls.Add(title, 0, 0);
+            header.Controls.Add(version, 1, 0);
+            header.Controls.Add(subtitle, 0, 1);
+            header.SetColumnSpan(subtitle, 2);
+            root.Controls.Add(header, 0, 0);
 
+            var folders = new Card { Dock = DockStyle.Fill };
+            var folderLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, BackColor = Theme.Surface, Margin = new Padding(0) };
+            folderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            folderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            folderLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            folderLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+            var folderTitles = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, BackColor = Theme.Surface, Margin = new Padding(0, 0, 0, 12) };
+            folderTitles.Controls.Add(Theme.SectionTitle("Game folders"));
+            folderTitles.Controls.Add(Theme.Hint("Every sub-folder inside is treated as one game. Double-click a folder to change it."));
+            folderLayout.Controls.Add(folderTitles, 0, 0);
+            folderLayout.SetColumnSpan(folderTitles, 2);
+
+            var well = new Card { Dock = DockStyle.Fill, Radius = 8, Padding = new Padding(6), Margin = new Padding(0), BackColor = Theme.Surface };
             lstRoots.Dock = DockStyle.Fill;
-            lstRoots.Height = 120;
+            lstRoots.BorderStyle = BorderStyle.None;
+            lstRoots.BackColor = Theme.Surface;
+            lstRoots.ForeColor = Theme.Text;
+            lstRoots.Font = new Font(Theme.Sans, 10f);
+            lstRoots.DrawMode = DrawMode.OwnerDrawFixed;
+            lstRoots.ItemHeight = 34;
             lstRoots.IntegralHeight = false;
-            lstRoots.HorizontalScrollbar = true;
-            lstRoots.SelectedIndexChanged += (s, e) => UpdateButtons();
+            lstRoots.DrawItem += DrawFolderItem;
+            lstRoots.SelectedIndexChanged += (s, e) => { UpdateButtons(); lstRoots.Invalidate(); };
             lstRoots.DoubleClick += (s, e) => ChangeFolder();
-            top.Controls.Add(lstRoots, 0, 1);
+            well.Controls.Add(lstRoots);
+            folderLayout.Controls.Add(well, 0, 1);
 
-            var side = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = new Padding(8, 0, 0, 0) };
+            var side = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, BackColor = Theme.Surface, Margin = new Padding(14, 0, 0, 0) };
             foreach (var b in new[] { btnAdd, btnChange, btnRemove })
             {
-                b.Size = new Size(170, 36);
-                b.Margin = new Padding(0, 0, 0, 6);
+                b.Size = new Size(132, 38);
+                b.Margin = new Padding(0, 0, 0, 8);
                 side.Controls.Add(b);
             }
-            btnAdd.Text = "Add folder...";
             btnAdd.Click += (s, e) => AddFolder();
-            btnChange.Text = "Change folder...";
             btnChange.Click += (s, e) => ChangeFolder();
-            btnRemove.Text = "Remove folder";
             btnRemove.Click += (s, e) => RemoveFolder();
-            top.Controls.Add(side, 1, 1);
+            folderLayout.Controls.Add(side, 1, 1);
+            folders.Controls.Add(folderLayout);
+            root.Controls.Add(folders, 0, 1);
 
-            chkRestart.Text = "Restart Playnite automatically to apply changes";
-            chkRestart.AutoSize = true;
-            chkRestart.Margin = new Padding(3, 8, 3, 4);
-            chkRestart.CheckedChanged += (s, e) => SaveSettings();
-            top.Controls.Add(chkRestart, 0, 2);
-            top.SetColumnSpan(chkRestart, 2);
-
-            var actions = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 4, Margin = new Padding(0) };
+            var actions = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 4, RowCount = 2, BackColor = Theme.Background, Margin = new Padding(0, 0, 0, 16) };
             actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
-            btnRun.Text = "Scan && Sync";
-            btnRun.Font = new Font(Font.FontFamily, 11f, FontStyle.Bold);
-            btnRun.Size = new Size(200, 42);
+            btnRun.Size = new Size(170, 44);
+            btnRun.Margin = new Padding(0, 0, 10, 0);
             btnRun.Click += (s, e) => StartSync();
             actions.Controls.Add(btnRun, 0, 0);
 
-            btnLogs.Text = "Open logs";
-            btnLogs.Size = new Size(130, 42);
+            btnLogs.Size = new Size(120, 44);
+            btnLogs.Margin = new Padding(0, 0, 10, 0);
             btnLogs.Click += (s, e) => { Directory.CreateDirectory(Paths.Logs); Process.Start("explorer.exe", "\"" + Paths.Logs + "\""); };
             actions.Controls.Add(btnLogs, 1, 0);
 
-            btnUpdate.Text = "Check for updates";
-            btnUpdate.Size = new Size(160, 42);
+            btnUpdate.Size = new Size(160, 44);
+            btnUpdate.Margin = new Padding(0, 0, 10, 0);
             btnUpdate.Click += (s, e) => CheckForUpdates(false);
             actions.Controls.Add(btnUpdate, 2, 0);
 
-            var progressBox = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, RowCount = 2, ColumnCount = 1, Margin = new Padding(8, 0, 3, 0) };
+            var progressBox = new TableLayoutPanel { Anchor = AnchorStyles.Left | AnchorStyles.Right, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, RowCount = 2, BackColor = Theme.Background, Margin = new Padding(14, 0, 0, 0) };
             progressBox.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            progressBox.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
+            progressBox.RowStyles.Add(new RowStyle(SizeType.Absolute, 10));
             lblStatus.Dock = DockStyle.Fill;
             lblStatus.AutoEllipsis = true;
-            lblStatus.Height = 20;
+            lblStatus.ForeColor = Theme.Muted;
+            lblStatus.Font = new Font(Theme.Sans, 9.5f);
+            lblStatus.TextAlign = ContentAlignment.BottomRight;
+            lblStatus.Margin = new Padding(0);
             bar.Dock = DockStyle.Fill;
-            bar.Height = 20;
+            bar.Margin = new Padding(0, 4, 0, 0);
             progressBox.Controls.Add(lblStatus, 0, 0);
             progressBox.Controls.Add(bar, 0, 1);
             actions.Controls.Add(progressBox, 3, 0);
 
-            top.Controls.Add(actions, 0, 3);
-            top.SetColumnSpan(actions, 2);
+            chkRestart.Text = "Restart Playnite automatically to apply changes";
+            chkRestart.AutoSize = true;
+            chkRestart.ForeColor = Theme.Muted;
+            chkRestart.Font = new Font(Theme.Sans, 9.5f);
+            chkRestart.Margin = new Padding(1, 10, 0, 0);
+            chkRestart.CheckedChanged += (s, e) => SaveSettings();
+            actions.Controls.Add(chkRestart, 0, 1);
+            actions.SetColumnSpan(chkRestart, 4);
+            root.Controls.Add(actions, 0, 2);
 
+            var logCard = new Card { Dock = DockStyle.Fill, Margin = new Padding(0) };
+            var logLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, BackColor = Theme.Surface, Margin = new Padding(0) };
+            logLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            logLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            logLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            logLayout.Controls.Add(Theme.SectionTitle("Activity"), 0, 0);
             txtLog.Multiline = true;
             txtLog.ReadOnly = true;
-            txtLog.ScrollBars = ScrollBars.Both;
-            txtLog.WordWrap = false;
-            txtLog.Font = new Font("Consolas", 9.5f);
+            txtLog.ScrollBars = ScrollBars.Vertical;
+            txtLog.WordWrap = true;
+            txtLog.BorderStyle = BorderStyle.None;
+            txtLog.BackColor = Theme.Surface;
+            txtLog.ForeColor = Theme.LogText;
+            txtLog.Font = new Font(Theme.Mono, 9.5f);
             txtLog.Dock = DockStyle.Fill;
-            txtLog.BackColor = SystemColors.Window;
+            txtLog.Margin = new Padding(0, 12, 0, 0);
+            logLayout.Controls.Add(txtLog, 0, 1);
+            logCard.Controls.Add(logLayout);
+            root.Controls.Add(logCard, 0, 3);
 
-            Controls.Add(txtLog);
-            Controls.Add(top);
+            Controls.Add(root);
 
             state = AppState.Load();
             foreach (var r in state.Roots) lstRoots.Items.Add(r);
@@ -1105,12 +1328,45 @@ namespace GameSorter
             chkRestart.Checked = state.AutoRestart;
             UpdateButtons();
 
-            Log("Game Sorter " + Assembly.GetExecutingAssembly().GetName().Version.ToString(3));
-            Log("1. Add the folder(s) where your games are (e.g. F:\\games). Use Change folder or Remove folder to edit the list.");
-            Log("2. Press Scan & Sync. New games are added to Playnite with names, covers and details;");
-            Log("   run it again any time to pick up new games, newer versions and deleted games.");
+            Log("Ready. Press Scan & Sync to add new games and pick up updates.");
+            Log("Add, change or remove game folders above at any time.");
             Log("");
             Shown += (s, e) => { CheckForUpdates(true); if (lstRoots.Items.Count == 0) AddFolder(); };
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            try
+            {
+                int caption = ColorTranslator.ToWin32(Theme.Background);
+                int text = ColorTranslator.ToWin32(Theme.Text);
+                DwmSetWindowAttribute(Handle, 35, ref caption, 4);
+                DwmSetWindowAttribute(Handle, 36, ref text, 4);
+            }
+            catch { }
+        }
+
+        void DrawFolderItem(object sender, DrawItemEventArgs e)
+        {
+            if (e.Index < 0) return;
+            bool selected = (e.State & DrawItemState.Selected) != 0;
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using (var bg = new SolidBrush(Theme.Surface)) g.FillRectangle(bg, e.Bounds);
+            if (selected)
+            {
+                using (var path = Theme.Rounded(new RectangleF(e.Bounds.X + 1, e.Bounds.Y + 2, e.Bounds.Width - 3, e.Bounds.Height - 4), 6))
+                using (var brush = new SolidBrush(Theme.Selection))
+                    g.FillPath(brush, path);
+            }
+            var fill = selected ? Theme.Selection : Theme.Surface;
+            var iconRect = new Rectangle(e.Bounds.X + 8, e.Bounds.Y, 26, e.Bounds.Height);
+            TextRenderer.DrawText(g, "", iconFont, iconRect, selected ? Theme.Accent : Theme.Muted, fill,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+            var textRect = new Rectangle(e.Bounds.X + 42, e.Bounds.Y, e.Bounds.Width - 50, e.Bounds.Height);
+            TextRenderer.DrawText(g, (string)lstRoots.Items[e.Index], lstRoots.Font, textRect, Theme.Text, fill,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine | TextFormatFlags.PathEllipsis);
         }
 
         string PickFolder(string startAt)

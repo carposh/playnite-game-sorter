@@ -48,7 +48,7 @@ your settings, logs and library backups stay in `%APPDATA%\GameSorter`.
 ## How to use
 
 1. Run `GameSorter.exe`. The first time, it asks you to choose your games folder. Add as
-   many folders as you like with **Add folder…**; it remembers them.
+   many folders as you like with **Add folder**; it remembers them.
 2. Press **Scan & Sync**.
 3. Game Sorter closes Playnite, backs up your Playnite library, reopens Playnite to apply
    the changes, and shows a report when it's done.
