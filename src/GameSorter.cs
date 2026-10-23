@@ -18,8 +18,8 @@ using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Game Sorter for Playnite")]
 [assembly: AssemblyProduct("Game Sorter")]
-[assembly: AssemblyVersion("2.0.0.0")]
-[assembly: AssemblyFileVersion("2.0.0.0")]
+[assembly: AssemblyVersion("2.1.0.0")]
+[assembly: AssemblyFileVersion("2.1.0.0")]
 
 namespace GameSorter
 {
@@ -806,13 +806,14 @@ namespace GameSorter
     class MainForm : Form
     {
         readonly ListBox lstRoots = new ListBox();
-        readonly Button btnAdd = new Button(), btnRemove = new Button(), btnRun = new Button(), btnLogs = new Button();
+        readonly Button btnAdd = new Button(), btnChange = new Button(), btnRemove = new Button(), btnRun = new Button(), btnLogs = new Button();
         readonly CheckBox chkRestart = new CheckBox();
         readonly ProgressBar bar = new ProgressBar();
         readonly Label lblStatus = new Label();
         readonly TextBox txtLog = new TextBox();
         readonly StringBuilder logText = new StringBuilder();
         AppState state;
+        bool busy;
 
         public MainForm()
         {
@@ -824,44 +825,73 @@ namespace GameSorter
             StartPosition = FormStartPosition.CenterScreen;
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
-            var top = new Panel { Dock = DockStyle.Top, Height = 230, Padding = new Padding(12) };
-            var lbl = new Label { Text = "Game folders - every sub-folder inside is treated as one game:", AutoSize = true, Location = new Point(12, 10) };
-            lstRoots.SetBounds(12, 34, 700, 110);
-            lstRoots.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            var top = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 2, Padding = new Padding(10, 8, 10, 8) };
+            top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+            var lbl = new Label { Text = "Game folders - every sub-folder inside is treated as one game (double-click a folder to change it):", AutoSize = true, Margin = new Padding(3, 3, 3, 6) };
+            top.Controls.Add(lbl, 0, 0);
+            top.SetColumnSpan(lbl, 2);
+
+            lstRoots.Dock = DockStyle.Fill;
+            lstRoots.Height = 120;
+            lstRoots.IntegralHeight = false;
             lstRoots.HorizontalScrollbar = true;
+            lstRoots.SelectedIndexChanged += (s, e) => UpdateButtons();
+            lstRoots.DoubleClick += (s, e) => ChangeFolder();
+            top.Controls.Add(lstRoots, 0, 1);
 
+            var side = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = new Padding(8, 0, 0, 0) };
+            foreach (var b in new[] { btnAdd, btnChange, btnRemove })
+            {
+                b.Size = new Size(170, 36);
+                b.Margin = new Padding(0, 0, 0, 6);
+                side.Controls.Add(b);
+            }
             btnAdd.Text = "Add folder...";
-            btnAdd.SetBounds(724, 34, 160, 34);
-            btnAdd.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnAdd.Click += (s, e) => AddFolder();
-
-            btnRemove.Text = "Remove";
-            btnRemove.SetBounds(724, 74, 160, 34);
-            btnRemove.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnRemove.Click += (s, e) => { if (lstRoots.SelectedIndex >= 0) { lstRoots.Items.RemoveAt(lstRoots.SelectedIndex); SaveSettings(); } };
+            btnChange.Text = "Change folder...";
+            btnChange.Click += (s, e) => ChangeFolder();
+            btnRemove.Text = "Remove folder";
+            btnRemove.Click += (s, e) => RemoveFolder();
+            top.Controls.Add(side, 1, 1);
 
             chkRestart.Text = "Restart Playnite automatically to apply changes";
             chkRestart.AutoSize = true;
-            chkRestart.Location = new Point(12, 152);
+            chkRestart.Margin = new Padding(3, 8, 3, 4);
             chkRestart.CheckedChanged += (s, e) => SaveSettings();
+            top.Controls.Add(chkRestart, 0, 2);
+            top.SetColumnSpan(chkRestart, 2);
+
+            var actions = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 3, Margin = new Padding(0) };
+            actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
             btnRun.Text = "Scan && Sync";
             btnRun.Font = new Font(Font.FontFamily, 11f, FontStyle.Bold);
-            btnRun.SetBounds(12, 180, 200, 40);
+            btnRun.Size = new Size(200, 42);
             btnRun.Click += (s, e) => StartSync();
+            actions.Controls.Add(btnRun, 0, 0);
 
             btnLogs.Text = "Open logs";
-            btnLogs.SetBounds(224, 180, 130, 40);
+            btnLogs.Size = new Size(130, 42);
             btnLogs.Click += (s, e) => { Directory.CreateDirectory(Paths.Logs); Process.Start("explorer.exe", "\"" + Paths.Logs + "\""); };
+            actions.Controls.Add(btnLogs, 1, 0);
 
-            bar.SetBounds(366, 186, 518, 26);
-            bar.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            var progressBox = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, RowCount = 2, ColumnCount = 1, Margin = new Padding(8, 0, 3, 0) };
+            progressBox.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            lblStatus.Dock = DockStyle.Fill;
+            lblStatus.AutoEllipsis = true;
+            lblStatus.Height = 20;
+            bar.Dock = DockStyle.Fill;
+            bar.Height = 20;
+            progressBox.Controls.Add(lblStatus, 0, 0);
+            progressBox.Controls.Add(bar, 0, 1);
+            actions.Controls.Add(progressBox, 2, 0);
 
-            lblStatus.SetBounds(366, 152, 518, 24);
-            lblStatus.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            lblStatus.TextAlign = ContentAlignment.MiddleRight;
-
-            top.Controls.AddRange(new Control[] { lbl, lstRoots, btnAdd, btnRemove, chkRestart, btnRun, btnLogs, bar, lblStatus });
+            top.Controls.Add(actions, 0, 3);
+            top.SetColumnSpan(actions, 2);
 
             txtLog.Multiline = true;
             txtLog.ReadOnly = true;
@@ -876,27 +906,85 @@ namespace GameSorter
 
             state = AppState.Load();
             foreach (var r in state.Roots) lstRoots.Items.Add(r);
+            if (lstRoots.Items.Count > 0) lstRoots.SelectedIndex = 0;
             chkRestart.Checked = state.AutoRestart;
+            UpdateButtons();
 
             Log("Game Sorter " + Assembly.GetExecutingAssembly().GetName().Version.ToString(3));
-            Log("1. Add the folder(s) where your games are (e.g. F:\\games).");
+            Log("1. Add the folder(s) where your games are (e.g. F:\\games). Use Change folder or Remove folder to edit the list.");
             Log("2. Press Scan & Sync. New games are added to Playnite with names, covers and details;");
             Log("   run it again any time to pick up new games, newer versions and deleted games.");
             Log("");
             Shown += (s, e) => { if (lstRoots.Items.Count == 0) AddFolder(); };
         }
 
-        void AddFolder()
+        string PickFolder(string startAt)
         {
             using (var dlg = new FolderBrowserDialog { Description = "Choose a folder that contains your games (each game in its own sub-folder)", ShowNewFolderButton = false })
             {
-                if (dlg.ShowDialog(this) != DialogResult.OK) return;
+                if (!string.IsNullOrEmpty(startAt) && Directory.Exists(startAt)) dlg.SelectedPath = startAt;
+                if (dlg.ShowDialog(this) != DialogResult.OK) return null;
                 var path = dlg.SelectedPath.TrimEnd('\\');
                 if (path.Length == 2) path += "\\";
-                foreach (string r in lstRoots.Items) if (string.Equals(r, path, StringComparison.OrdinalIgnoreCase)) return;
-                lstRoots.Items.Add(path);
-                SaveSettings();
+                return path;
             }
+        }
+
+        int IndexOfFolder(string path)
+        {
+            for (int i = 0; i < lstRoots.Items.Count; i++)
+                if (string.Equals((string)lstRoots.Items[i], path, StringComparison.OrdinalIgnoreCase)) return i;
+            return -1;
+        }
+
+        void AddFolder()
+        {
+            var path = PickFolder(null);
+            if (path == null) return;
+            int existing = IndexOfFolder(path);
+            if (existing >= 0) { lstRoots.SelectedIndex = existing; return; }
+            lstRoots.Items.Add(path);
+            lstRoots.SelectedIndex = lstRoots.Items.Count - 1;
+            SaveSettings();
+        }
+
+        void ChangeFolder()
+        {
+            if (busy) return;
+            int index = lstRoots.SelectedIndex;
+            if (index < 0) { AddFolder(); return; }
+            var path = PickFolder((string)lstRoots.Items[index]);
+            if (path == null) return;
+            int existing = IndexOfFolder(path);
+            if (existing >= 0 && existing != index)
+            {
+                lstRoots.Items.RemoveAt(index);
+                lstRoots.SelectedIndex = IndexOfFolder(path);
+            }
+            else
+            {
+                lstRoots.Items[index] = path;
+                lstRoots.SelectedIndex = index;
+            }
+            SaveSettings();
+        }
+
+        void RemoveFolder()
+        {
+            int index = lstRoots.SelectedIndex;
+            if (index < 0) return;
+            lstRoots.Items.RemoveAt(index);
+            if (lstRoots.Items.Count > 0) lstRoots.SelectedIndex = Math.Min(index, lstRoots.Items.Count - 1);
+            SaveSettings();
+            UpdateButtons();
+        }
+
+        void UpdateButtons()
+        {
+            bool selected = lstRoots.SelectedIndex >= 0;
+            btnAdd.Enabled = !busy;
+            btnChange.Enabled = !busy && selected;
+            btnRemove.Enabled = !busy && selected;
         }
 
         void SaveSettings()
@@ -958,10 +1046,12 @@ namespace GameSorter
             t.Start();
         }
 
-        void SetBusy(bool busy)
+        void SetBusy(bool isBusy)
         {
-            btnRun.Enabled = btnAdd.Enabled = btnRemove.Enabled = chkRestart.Enabled = !busy;
-            UseWaitCursor = busy;
+            busy = isBusy;
+            btnRun.Enabled = chkRestart.Enabled = !isBusy;
+            UpdateButtons();
+            UseWaitCursor = isBusy;
         }
     }
 }
