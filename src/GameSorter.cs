@@ -20,8 +20,8 @@ using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Game Sorter for Playnite")]
 [assembly: AssemblyProduct("Game Sorter")]
-[assembly: AssemblyVersion("2.3.0.0")]
-[assembly: AssemblyFileVersion("2.3.0.0")]
+[assembly: AssemblyVersion("2.4.0.0")]
+[assembly: AssemblyFileVersion("2.4.0.0")]
 
 namespace GameSorter
 {
@@ -84,6 +84,9 @@ namespace GameSorter
 
     static class Installer
     {
+        [DllImport("shell32.dll")]
+        static extern void SHChangeNotify(int eventId, uint flags, IntPtr item1, IntPtr item2);
+
         public const string Repo = "carposh/playnite-game-sorter";
         const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\GameSorter";
         public static readonly string Dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "GameSorter");
@@ -157,6 +160,7 @@ namespace GameSorter
             Register();
             CreateShortcut(StartMenuLink);
             if (createDesktopShortcut || File.Exists(DesktopLink)) CreateShortcut(DesktopLink);
+            try { SHChangeNotify(0x08000000, 0, IntPtr.Zero, IntPtr.Zero); } catch { }
         }
 
         static void Register()
@@ -996,20 +1000,11 @@ namespace GameSorter
 
     static class Theme
     {
-        public static readonly Color Background = Color.FromArgb(245, 244, 238);
-        public static readonly Color Surface = Color.FromArgb(255, 255, 255);
-        public static readonly Color Border = Color.FromArgb(222, 219, 208);
-        public static readonly Color Text = Color.FromArgb(31, 30, 29);
-        public static readonly Color Muted = Color.FromArgb(115, 112, 105);
-        public static readonly Color LogText = Color.FromArgb(62, 60, 56);
-        public static readonly Color Accent = Color.FromArgb(193, 95, 60);
-        public static readonly Color AccentHover = Color.FromArgb(172, 82, 50);
-        public static readonly Color AccentPressed = Color.FromArgb(150, 70, 42);
-        public static readonly Color Subtle = Color.FromArgb(240, 238, 231);
-        public static readonly Color SubtlePressed = Color.FromArgb(230, 227, 218);
-        public static readonly Color Selection = Color.FromArgb(246, 233, 225);
-        public static readonly Color Track = Color.FromArgb(232, 229, 220);
-        public static readonly Color Disabled = Color.FromArgb(226, 223, 214);
+        public static bool Dark;
+        public static Color Background, Surface, Border, Text, Muted, LogText;
+        public static Color Accent, AccentHover, AccentPressed, AccentText;
+        public static Color Subtle, SubtlePressed, Selection, Track, Disabled;
+        public static Color ChromeFace, ChromeButton, ChromeHighlight, ChromeLight, ChromeShadow, ChromeDark;
 
         static readonly HashSet<string> Installed = new HashSet<string>(new InstalledFontCollection().Families.Select(f => f.Name), StringComparer.OrdinalIgnoreCase);
 
@@ -1026,6 +1021,119 @@ namespace GameSorter
         public static readonly string Mono = Pick("Cascadia Mono", "Consolas");
         public static readonly string Icons = Pick("Segoe Fluent Icons", "Segoe MDL2 Assets");
 
+        static Theme() { Load(); }
+
+        public static bool SystemUsesDarkMode()
+        {
+            try
+            {
+                using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"))
+                {
+                    var v = k == null ? null : k.GetValue("AppsUseLightTheme");
+                    return v is int && (int)v == 0;
+                }
+            }
+            catch { return false; }
+        }
+
+        public static bool Load()
+        {
+            return Apply(SystemUsesDarkMode());
+        }
+
+        public static bool Apply(bool dark)
+        {
+            bool changed = dark != Dark || Background.IsEmpty;
+            Dark = dark;
+            if (dark)
+            {
+                Background = Color.FromArgb(31, 30, 29);
+                Surface = Color.FromArgb(42, 41, 39);
+                Border = Color.FromArgb(64, 62, 58);
+                Text = Color.FromArgb(236, 234, 227);
+                Muted = Color.FromArgb(160, 156, 148);
+                LogText = Color.FromArgb(214, 211, 203);
+                Accent = Color.FromArgb(206, 112, 80);
+                AccentHover = Color.FromArgb(222, 128, 96);
+                AccentPressed = Color.FromArgb(186, 98, 68);
+                AccentText = Color.White;
+                Subtle = Color.FromArgb(52, 51, 48);
+                SubtlePressed = Color.FromArgb(62, 60, 57);
+                Selection = Color.FromArgb(70, 50, 42);
+                Track = Color.FromArgb(58, 56, 53);
+                Disabled = Color.FromArgb(56, 54, 51);
+                ChromeFace = Color.FromArgb(38, 37, 35);
+                ChromeButton = Color.FromArgb(54, 53, 50);
+                ChromeHighlight = Color.FromArgb(96, 93, 88);
+                ChromeLight = Color.FromArgb(70, 68, 64);
+                ChromeShadow = Color.FromArgb(22, 22, 21);
+                ChromeDark = Color.FromArgb(8, 8, 8);
+            }
+            else
+            {
+                Background = Color.FromArgb(245, 244, 238);
+                Surface = Color.FromArgb(255, 255, 255);
+                Border = Color.FromArgb(222, 219, 208);
+                Text = Color.FromArgb(31, 30, 29);
+                Muted = Color.FromArgb(115, 112, 105);
+                LogText = Color.FromArgb(62, 60, 56);
+                Accent = Color.FromArgb(193, 95, 60);
+                AccentHover = Color.FromArgb(172, 82, 50);
+                AccentPressed = Color.FromArgb(150, 70, 42);
+                AccentText = Color.White;
+                Subtle = Color.FromArgb(240, 238, 231);
+                SubtlePressed = Color.FromArgb(230, 227, 218);
+                Selection = Color.FromArgb(246, 233, 225);
+                Track = Color.FromArgb(232, 229, 220);
+                Disabled = Color.FromArgb(226, 223, 214);
+                ChromeFace = Color.FromArgb(240, 239, 234);
+                ChromeButton = Color.FromArgb(250, 249, 246);
+                ChromeHighlight = Color.White;
+                ChromeLight = Color.FromArgb(252, 251, 248);
+                ChromeShadow = Color.FromArgb(168, 165, 156);
+                ChromeDark = Color.FromArgb(105, 102, 95);
+            }
+            return changed;
+        }
+
+        public static Color Get(string role)
+        {
+            switch (role)
+            {
+                case "bg": return Background;
+                case "surface": return Surface;
+                case "text": return Text;
+                case "muted": return Muted;
+                case "log": return LogText;
+                case "chrome": return ChromeFace;
+                default: return Color.Empty;
+            }
+        }
+
+        public static T Role<T>(T control, string back, string fore) where T : Control
+        {
+            control.Tag = back + "|" + fore;
+            control.BackColor = Get(back);
+            if (!string.IsNullOrEmpty(fore)) control.ForeColor = Get(fore);
+            return control;
+        }
+
+        public static void ApplyRoles(Control parent)
+        {
+            foreach (Control c in parent.Controls)
+            {
+                var role = c.Tag as string;
+                if (role != null)
+                {
+                    var parts = role.Split('|');
+                    c.BackColor = Get(parts[0]);
+                    if (parts.Length > 1 && parts[1].Length > 0) c.ForeColor = Get(parts[1]);
+                }
+                ApplyRoles(c);
+                c.Invalidate();
+            }
+        }
+
         public static GraphicsPath Rounded(RectangleF r, float radius)
         {
             float d = radius * 2;
@@ -1038,26 +1146,47 @@ namespace GameSorter
             return p;
         }
 
+        public static void Bevel(Graphics g, Rectangle r, bool sunken)
+        {
+            Color outerTopLeft = sunken ? ChromeDark : ChromeHighlight;
+            Color outerBottomRight = sunken ? ChromeHighlight : ChromeDark;
+            Color innerTopLeft = sunken ? ChromeShadow : ChromeLight;
+            Color innerBottomRight = sunken ? ChromeLight : ChromeShadow;
+            Edge(g, r, outerTopLeft, outerBottomRight);
+            Edge(g, Rectangle.Inflate(r, -1, -1), innerTopLeft, innerBottomRight);
+        }
+
+        static void Edge(Graphics g, Rectangle r, Color topLeft, Color bottomRight)
+        {
+            using (var tl = new Pen(topLeft))
+            using (var br = new Pen(bottomRight))
+            {
+                g.DrawLine(tl, r.Left, r.Top, r.Right - 1, r.Top);
+                g.DrawLine(tl, r.Left, r.Top, r.Left, r.Bottom - 1);
+                g.DrawLine(br, r.Left, r.Bottom - 1, r.Right - 1, r.Bottom - 1);
+                g.DrawLine(br, r.Right - 1, r.Top, r.Right - 1, r.Bottom - 1);
+            }
+        }
+
         public static Label SectionTitle(string text)
         {
-            return new Label { Text = text, AutoSize = true, Font = new Font(SerifHeading, 14f), ForeColor = Text, BackColor = Surface, Margin = new Padding(0) };
+            return Role(new Label { Text = text, AutoSize = true, Font = new Font(SerifHeading, 14f), Margin = new Padding(0) }, "surface", "text");
         }
 
         public static Label Hint(string text)
         {
-            return new Label { Text = text, AutoSize = true, Font = new Font(Sans, 9.5f), ForeColor = Muted, BackColor = Surface, Margin = new Padding(1, 3, 0, 0) };
+            return Role(new Label { Text = text, AutoSize = true, Font = new Font(Sans, 9.5f), Margin = new Padding(1, 3, 0, 0) }, "surface", "muted");
         }
     }
 
     class Card : Panel
     {
         public float Radius = 12;
-        public Color Fill = Theme.Surface;
 
         public Card()
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
-            BackColor = Theme.Background;
+            Theme.Role(this, "bg", "");
             Padding = new Padding(22, 18, 22, 20);
             Margin = new Padding(0, 0, 0, 16);
         }
@@ -1066,7 +1195,7 @@ namespace GameSorter
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             using (var path = Theme.Rounded(new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f), Radius))
-            using (var fill = new SolidBrush(Fill))
+            using (var fill = new SolidBrush(Theme.Surface))
             using (var pen = new Pen(Theme.Border))
             {
                 e.Graphics.FillPath(fill, path);
@@ -1113,7 +1242,7 @@ namespace GameSorter
             g.SmoothingMode = SmoothingMode.AntiAlias;
             Color fill, border, text;
             if (!Enabled) { fill = primary ? Theme.Disabled : Theme.Surface; border = Theme.Disabled; text = Theme.Muted; }
-            else if (primary) { fill = pressed ? Theme.AccentPressed : hover ? Theme.AccentHover : Theme.Accent; border = fill; text = Color.White; }
+            else if (primary) { fill = pressed ? Theme.AccentPressed : hover ? Theme.AccentHover : Theme.Accent; border = fill; text = Theme.AccentText; }
             else { fill = pressed ? Theme.SubtlePressed : hover ? Theme.Subtle : Theme.Surface; border = Theme.Border; text = Theme.Text; }
             using (var path = Theme.Rounded(new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f), 8))
             using (var brush = new SolidBrush(fill))
@@ -1125,7 +1254,7 @@ namespace GameSorter
             if (Focused && ShowFocusCues)
             {
                 using (var path = Theme.Rounded(new RectangleF(2.5f, 2.5f, Width - 5.5f, Height - 5.5f), 6))
-                using (var pen = new Pen(Color.FromArgb(110, primary ? Color.White : Theme.Text)))
+                using (var pen = new Pen(Color.FromArgb(110, primary ? Theme.AccentText : Theme.Text)))
                     g.DrawPath(pen, path);
             }
             TextRenderer.DrawText(g, Text, Font, ClientRectangle, text, fill,
@@ -1163,11 +1292,165 @@ namespace GameSorter
         }
     }
 
+    class TitleBar : Control
+    {
+        [DllImport("user32.dll")] static extern bool ReleaseCapture();
+        [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+        [DllImport("user32.dll")] static extern IntPtr GetSystemMenu(IntPtr hWnd, bool revert);
+        [DllImport("user32.dll")] static extern int TrackPopupMenu(IntPtr menu, uint flags, int x, int y, int reserved, IntPtr hWnd, IntPtr rect);
+
+        const int WM_NCLBUTTONDOWN = 0xA1, WM_SYSCOMMAND = 0x112, HTCAPTION = 2;
+        const uint TPM_RETURNCMD = 0x100;
+
+        readonly Form owner;
+        int pressedButton = -1;
+        bool pressedInside;
+        DateTime lastClick = DateTime.MinValue;
+        Point lastClickAt;
+
+        public TitleBar(Form owner)
+        {
+            this.owner = owner;
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
+            Dock = DockStyle.Top;
+            Height = 30;
+            Font = new Font(Theme.Sans, 9f);
+        }
+
+        Rectangle IconRect { get { return new Rectangle(7, (Height - 16) / 2, 16, 16); } }
+
+        Rectangle ButtonRect(int index)
+        {
+            int w = 24, h = 20, top = (Height - h) / 2, closeLeft = Width - 6 - w;
+            if (index == 2) return new Rectangle(closeLeft, top, w, h);
+            if (index == 1) return new Rectangle(closeLeft - 4 - w, top, w, h);
+            return new Rectangle(closeLeft - 4 - 2 * w - 2, top, w, h);
+        }
+
+        int HitButton(Point p)
+        {
+            for (int i = 0; i < 3; i++) if (ButtonRect(i).Contains(p)) return i;
+            return -1;
+        }
+
+        void ToggleMaximize()
+        {
+            owner.WindowState = owner.WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
+        }
+
+        void ShowSystemMenu(Point screen)
+        {
+            var menu = GetSystemMenu(owner.Handle, false);
+            int command = TrackPopupMenu(menu, TPM_RETURNCMD, screen.X, screen.Y, 0, owner.Handle, IntPtr.Zero);
+            if (command != 0) SendMessage(owner.Handle, WM_SYSCOMMAND, (IntPtr)command, IntPtr.Zero);
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            int button = HitButton(e.Location);
+            if (e.Button == MouseButtons.Right && button < 0) { ShowSystemMenu(PointToScreen(e.Location)); return; }
+            if (e.Button != MouseButtons.Left) return;
+            if (button >= 0) { pressedButton = button; pressedInside = true; Capture = true; Invalidate(); return; }
+            if (IconRect.Contains(e.Location)) { ShowSystemMenu(PointToScreen(new Point(IconRect.Left, Height))); return; }
+            var size = SystemInformation.DoubleClickSize;
+            bool doubleClick = (DateTime.Now - lastClick).TotalMilliseconds <= SystemInformation.DoubleClickTime
+                && Math.Abs(e.X - lastClickAt.X) <= size.Width && Math.Abs(e.Y - lastClickAt.Y) <= size.Height;
+            lastClick = DateTime.Now;
+            lastClickAt = e.Location;
+            if (doubleClick) { lastClick = DateTime.MinValue; ToggleMaximize(); return; }
+            ReleaseCapture();
+            SendMessage(owner.Handle, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero);
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            if (pressedButton < 0) return;
+            bool inside = ButtonRect(pressedButton).Contains(e.Location);
+            if (inside != pressedInside) { pressedInside = inside; Invalidate(); }
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            base.OnMouseUp(e);
+            if (pressedButton < 0) return;
+            int button = pressedButton;
+            bool inside = ButtonRect(button).Contains(e.Location);
+            pressedButton = -1;
+            Capture = false;
+            Invalidate();
+            if (!inside) return;
+            if (button == 0) owner.WindowState = FormWindowState.Minimized;
+            else if (button == 1) ToggleMaximize();
+            else owner.Close();
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            bool active = Form.ActiveForm == owner;
+            g.Clear(Theme.ChromeFace);
+            using (var line = new Pen(Theme.ChromeShadow)) g.DrawLine(line, 0, Height - 1, Width, Height - 1);
+            if (owner.Icon != null)
+            {
+                try { g.DrawIcon(owner.Icon, IconRect); } catch { }
+            }
+            var titleRect = new Rectangle(IconRect.Right + 7, 0, Math.Max(0, ButtonRect(0).Left - IconRect.Right - 14), Height - 1);
+            TextRenderer.DrawText(g, owner.Text, Font, titleRect, active ? Theme.Text : Theme.Muted, Theme.ChromeFace,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
+            for (int i = 0; i < 3; i++) DrawButton(g, i, pressedButton == i && pressedInside, active);
+        }
+
+        void DrawButton(Graphics g, int index, bool down, bool active)
+        {
+            var r = ButtonRect(index);
+            using (var face = new SolidBrush(Theme.ChromeButton)) g.FillRectangle(face, r);
+            Theme.Bevel(g, r, down);
+            int offset = down ? 1 : 0;
+            int cx = r.X + r.Width / 2 + offset, cy = r.Y + r.Height / 2 + offset;
+            var color = active ? Theme.Text : Theme.Muted;
+            using (var brush = new SolidBrush(color))
+            using (var pen = new Pen(color))
+            using (var face = new SolidBrush(Theme.ChromeButton))
+            {
+                if (index == 0)
+                {
+                    g.FillRectangle(brush, cx - 4, cy + 3, 7, 2);
+                }
+                else if (index == 1 && owner.WindowState == FormWindowState.Maximized)
+                {
+                    g.DrawRectangle(pen, cx - 2, cy - 5, 7, 6);
+                    g.FillRectangle(brush, cx - 2, cy - 5, 8, 2);
+                    g.FillRectangle(face, cx - 5, cy - 2, 8, 7);
+                    g.DrawRectangle(pen, cx - 5, cy - 2, 7, 6);
+                    g.FillRectangle(brush, cx - 5, cy - 2, 8, 2);
+                }
+                else if (index == 1)
+                {
+                    g.DrawRectangle(pen, cx - 5, cy - 5, 9, 8);
+                    g.FillRectangle(brush, cx - 5, cy - 5, 10, 2);
+                }
+                else
+                {
+                    for (int dx = 0; dx < 2; dx++)
+                    {
+                        g.DrawLine(pen, cx - 4 + dx, cy - 4, cx + 2 + dx, cy + 2);
+                        g.DrawLine(pen, cx + 2 + dx, cy - 4, cx - 4 + dx, cy + 2);
+                    }
+                }
+            }
+        }
+    }
+
     class MainForm : Form
     {
-        [DllImport("dwmapi.dll")]
-        static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+        [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)]
+        static extern int SetWindowTheme(IntPtr hWnd, string appName, string idList);
 
+        const int FrameWidth = 4;
+
+        readonly TitleBar titleBar;
         readonly ListBox lstRoots = new ListBox();
         readonly FlatButton btnAdd = new FlatButton("Add folder", false), btnChange = new FlatButton("Change", false), btnRemove = new FlatButton("Remove", false);
         readonly FlatButton btnRun = new FlatButton("Scan & Sync", true), btnLogs = new FlatButton("Open logs", false), btnUpdate = new FlatButton("Check for updates", false);
@@ -1184,27 +1467,31 @@ namespace GameSorter
         {
             Text = "Game Sorter";
             Font = new Font(Theme.Sans, 10f);
-            BackColor = Theme.Background;
-            ForeColor = Theme.Text;
+            FormBorderStyle = FormBorderStyle.None;
             AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(940, 740);
-            MinimumSize = new Size(720, 660);
+            ClientSize = new Size(940, 770);
+            MinimumSize = new Size(720, 690);
             StartPosition = FormStartPosition.CenterScreen;
+            Padding = new Padding(FrameWidth);
+            DoubleBuffered = true;
+            ResizeRedraw = true;
+            Theme.Role(this, "chrome", "text");
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
+            titleBar = new TitleBar(this);
 
-            var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(30, 22, 30, 26), BackColor = Theme.Background };
+            var root = Theme.Role(new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(30, 20, 30, 26) }, "bg", "text");
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 262));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-            var header = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 2, RowCount = 2, BackColor = Theme.Background, Margin = new Padding(0, 0, 0, 18) };
+            var header = Theme.Role(new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 2, RowCount = 2, Margin = new Padding(0, 0, 0, 18) }, "bg", "text");
             header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            var title = new Label { Text = "Game Sorter", AutoSize = true, Font = new Font(Theme.SerifDisplay, 26f), ForeColor = Theme.Text, Margin = new Padding(0) };
-            var subtitle = new Label { Text = "Bring every game on your PC into Playnite, with names, artwork and details.", AutoSize = true, Font = new Font(Theme.Sans, 10.5f), ForeColor = Theme.Muted, Margin = new Padding(2, 0, 0, 0) };
-            var version = new Label { Text = "Version " + Installer.Normalize(Installer.Current).ToString(3), AutoSize = true, Font = new Font(Theme.Sans, 9f), ForeColor = Theme.Muted, Anchor = AnchorStyles.Right | AnchorStyles.Bottom, Margin = new Padding(0, 0, 0, 8) };
+            var title = Theme.Role(new Label { Text = "Game Sorter", AutoSize = true, Font = new Font(Theme.SerifDisplay, 26f), Margin = new Padding(0) }, "bg", "text");
+            var subtitle = Theme.Role(new Label { Text = "Bring every game on your PC into Playnite, with names, artwork and details.", AutoSize = true, Font = new Font(Theme.Sans, 10.5f), Margin = new Padding(2, 0, 0, 0) }, "bg", "muted");
+            var version = Theme.Role(new Label { Text = "Version " + Installer.Normalize(Installer.Current).ToString(3), AutoSize = true, Font = new Font(Theme.Sans, 9f), Anchor = AnchorStyles.Right | AnchorStyles.Bottom, Margin = new Padding(0, 0, 0, 8) }, "bg", "muted");
             header.Controls.Add(title, 0, 0);
             header.Controls.Add(version, 1, 0);
             header.Controls.Add(subtitle, 0, 1);
@@ -1212,23 +1499,23 @@ namespace GameSorter
             root.Controls.Add(header, 0, 0);
 
             var folders = new Card { Dock = DockStyle.Fill };
-            var folderLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, BackColor = Theme.Surface, Margin = new Padding(0) };
+            var folderLayout = Theme.Role(new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, Margin = new Padding(0) }, "surface", "text");
             folderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             folderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             folderLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             folderLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-            var folderTitles = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, BackColor = Theme.Surface, Margin = new Padding(0, 0, 0, 12) };
+            var folderTitles = Theme.Role(new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, Margin = new Padding(0, 0, 0, 12) }, "surface", "text");
             folderTitles.Controls.Add(Theme.SectionTitle("Game folders"));
             folderTitles.Controls.Add(Theme.Hint("Every sub-folder inside is treated as one game. Double-click a folder to change it."));
             folderLayout.Controls.Add(folderTitles, 0, 0);
             folderLayout.SetColumnSpan(folderTitles, 2);
 
-            var well = new Card { Dock = DockStyle.Fill, Radius = 8, Padding = new Padding(6), Margin = new Padding(0), BackColor = Theme.Surface };
+            var well = new Card { Dock = DockStyle.Fill, Radius = 8, Padding = new Padding(6), Margin = new Padding(0) };
+            Theme.Role(well, "surface", "");
             lstRoots.Dock = DockStyle.Fill;
             lstRoots.BorderStyle = BorderStyle.None;
-            lstRoots.BackColor = Theme.Surface;
-            lstRoots.ForeColor = Theme.Text;
+            Theme.Role(lstRoots, "surface", "text");
             lstRoots.Font = new Font(Theme.Sans, 10f);
             lstRoots.DrawMode = DrawMode.OwnerDrawFixed;
             lstRoots.ItemHeight = 34;
@@ -1239,7 +1526,7 @@ namespace GameSorter
             well.Controls.Add(lstRoots);
             folderLayout.Controls.Add(well, 0, 1);
 
-            var side = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, BackColor = Theme.Surface, Margin = new Padding(14, 0, 0, 0) };
+            var side = Theme.Role(new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, Margin = new Padding(14, 0, 0, 0) }, "surface", "text");
             foreach (var b in new[] { btnAdd, btnChange, btnRemove })
             {
                 b.Size = new Size(132, 38);
@@ -1253,7 +1540,7 @@ namespace GameSorter
             folders.Controls.Add(folderLayout);
             root.Controls.Add(folders, 0, 1);
 
-            var actions = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 4, RowCount = 2, BackColor = Theme.Background, Margin = new Padding(0, 0, 0, 16) };
+            var actions = Theme.Role(new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 4, RowCount = 2, Margin = new Padding(0, 0, 0, 16) }, "bg", "text");
             actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -1274,13 +1561,13 @@ namespace GameSorter
             btnUpdate.Click += (s, e) => CheckForUpdates(false);
             actions.Controls.Add(btnUpdate, 2, 0);
 
-            var progressBox = new TableLayoutPanel { Anchor = AnchorStyles.Left | AnchorStyles.Right, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, RowCount = 2, BackColor = Theme.Background, Margin = new Padding(14, 0, 0, 0) };
+            var progressBox = Theme.Role(new TableLayoutPanel { Anchor = AnchorStyles.Left | AnchorStyles.Right, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, RowCount = 2, Margin = new Padding(14, 0, 0, 0) }, "bg", "text");
             progressBox.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             progressBox.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
             progressBox.RowStyles.Add(new RowStyle(SizeType.Absolute, 10));
             lblStatus.Dock = DockStyle.Fill;
             lblStatus.AutoEllipsis = true;
-            lblStatus.ForeColor = Theme.Muted;
+            Theme.Role(lblStatus, "bg", "muted");
             lblStatus.Font = new Font(Theme.Sans, 9.5f);
             lblStatus.TextAlign = ContentAlignment.BottomRight;
             lblStatus.Margin = new Padding(0);
@@ -1292,7 +1579,7 @@ namespace GameSorter
 
             chkRestart.Text = "Restart Playnite automatically to apply changes";
             chkRestart.AutoSize = true;
-            chkRestart.ForeColor = Theme.Muted;
+            Theme.Role(chkRestart, "bg", "muted");
             chkRestart.Font = new Font(Theme.Sans, 9.5f);
             chkRestart.Margin = new Padding(1, 10, 0, 0);
             chkRestart.CheckedChanged += (s, e) => SaveSettings();
@@ -1301,7 +1588,7 @@ namespace GameSorter
             root.Controls.Add(actions, 0, 2);
 
             var logCard = new Card { Dock = DockStyle.Fill, Margin = new Padding(0) };
-            var logLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, BackColor = Theme.Surface, Margin = new Padding(0) };
+            var logLayout = Theme.Role(new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = new Padding(0) }, "surface", "text");
             logLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             logLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             logLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -1311,8 +1598,7 @@ namespace GameSorter
             txtLog.ScrollBars = ScrollBars.Vertical;
             txtLog.WordWrap = true;
             txtLog.BorderStyle = BorderStyle.None;
-            txtLog.BackColor = Theme.Surface;
-            txtLog.ForeColor = Theme.LogText;
+            Theme.Role(txtLog, "surface", "log");
             txtLog.Font = new Font(Theme.Mono, 9.5f);
             txtLog.Dock = DockStyle.Fill;
             txtLog.Margin = new Padding(0, 12, 0, 0);
@@ -1321,6 +1607,7 @@ namespace GameSorter
             root.Controls.Add(logCard, 0, 3);
 
             Controls.Add(root);
+            Controls.Add(titleBar);
 
             state = AppState.Load();
             foreach (var r in state.Roots) lstRoots.Items.Add(r);
@@ -1332,19 +1619,96 @@ namespace GameSorter
             Log("Add, change or remove game folders above at any time.");
             Log("");
             Shown += (s, e) => { CheckForUpdates(true); if (lstRoots.Items.Count == 0) AddFolder(); };
+            Microsoft.Win32.SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+        }
+
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                var cp = base.CreateParams;
+                cp.Style |= 0x00020000 | 0x00010000 | 0x00080000;
+                return cp;
+            }
         }
 
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            try
+            ApplyNativeTheme();
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            Microsoft.Win32.SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+            base.OnFormClosed(e);
+        }
+
+        void OnUserPreferenceChanged(object sender, Microsoft.Win32.UserPreferenceChangedEventArgs e)
+        {
+            try { BeginInvoke(new Action(ApplyTheme)); } catch { }
+        }
+
+        void ApplyTheme()
+        {
+            if (!Theme.Load()) return;
+            BackColor = Theme.ChromeFace;
+            Theme.ApplyRoles(this);
+            ApplyNativeTheme();
+            Invalidate(true);
+        }
+
+        void ApplyNativeTheme()
+        {
+            string theme = Theme.Dark ? "DarkMode_Explorer" : "Explorer";
+            try { SetWindowTheme(txtLog.Handle, theme, null); } catch { }
+            try { SetWindowTheme(lstRoots.Handle, theme, null); } catch { }
+        }
+
+        void UpdateMaximizedBounds()
+        {
+            var screen = Screen.FromHandle(Handle);
+            var work = screen.WorkingArea;
+            MaximizedBounds = new Rectangle(work.X - screen.Bounds.X, work.Y - screen.Bounds.Y, work.Width, work.Height);
+        }
+
+        protected override void OnMove(EventArgs e)
+        {
+            base.OnMove(e);
+            if (IsHandleCreated && WindowState != FormWindowState.Maximized) UpdateMaximizedBounds();
+        }
+
+        protected override void OnResize(EventArgs e)
+        {
+            if (IsHandleCreated) Padding = new Padding(WindowState == FormWindowState.Maximized ? 0 : FrameWidth);
+            base.OnResize(e);
+            if (titleBar != null) titleBar.Invalidate();
+        }
+
+        protected override void OnActivated(EventArgs e) { base.OnActivated(e); titleBar.Invalidate(); }
+        protected override void OnDeactivate(EventArgs e) { base.OnDeactivate(e); titleBar.Invalidate(); }
+        protected override void OnTextChanged(EventArgs e) { base.OnTextChanged(e); if (titleBar != null) titleBar.Invalidate(); }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            if (WindowState == FormWindowState.Maximized) return;
+            Theme.Bevel(e.Graphics, ClientRectangle, false);
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            const int WM_NCHITTEST = 0x84;
+            if (m.Msg == WM_NCHITTEST && WindowState == FormWindowState.Normal)
             {
-                int caption = ColorTranslator.ToWin32(Theme.Background);
-                int text = ColorTranslator.ToWin32(Theme.Text);
-                DwmSetWindowAttribute(Handle, 35, ref caption, 4);
-                DwmSetWindowAttribute(Handle, 36, ref text, 4);
+                long lp = m.LParam.ToInt64();
+                var p = PointToClient(new Point((short)(lp & 0xFFFF), (short)((lp >> 16) & 0xFFFF)));
+                int grip = FrameWidth + 2;
+                bool left = p.X < grip, right = p.X >= ClientSize.Width - grip, top = p.Y < grip, bottom = p.Y >= ClientSize.Height - grip;
+                int hit = top && left ? 13 : top && right ? 14 : bottom && left ? 16 : bottom && right ? 17 : left ? 10 : right ? 11 : top ? 12 : bottom ? 15 : 0;
+                if (hit != 0) { m.Result = (IntPtr)hit; return; }
             }
-            catch { }
+            base.WndProc(ref m);
         }
 
         void DrawFolderItem(object sender, DrawItemEventArgs e)

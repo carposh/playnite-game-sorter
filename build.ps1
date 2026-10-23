@@ -5,24 +5,41 @@ $src = Join-Path $here 'src'
 $obj = Join-Path $src 'obj'
 New-Item -ItemType Directory -Force $obj | Out-Null
 
-# App icon: a game-controller glyph on a rounded tile, packed as a multi-size .ico.
 Add-Type -AssemblyName System.Drawing
 $ico = Join-Path $obj 'app.ico'
-$pngs = foreach ($size in 256, 48, 32, 16) {
+$ink = [System.Drawing.Color]::FromArgb(255, 31, 30, 29)
+$cream = [System.Drawing.Color]::FromArgb(255, 240, 238, 230)
+$clay = [System.Drawing.Color]::FromArgb(255, 217, 119, 87)
+$pngs = foreach ($size in 256, 64, 48, 32, 24, 16) {
+    $k = $size / 32.0
+    function U([double]$v) { [int][Math]::Round($v * $k) }
     $bmp = New-Object System.Drawing.Bitmap $size, $size
     $g = [System.Drawing.Graphics]::FromImage($bmp)
-    $g.SmoothingMode = 'AntiAlias'; $g.TextRenderingHint = 'AntiAliasGridFit'
-    $r = [int]($size * 0.22); $path = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $g.SmoothingMode = 'AntiAlias'
+    $r = [Math]::Max(2, (U 7)); $path = New-Object System.Drawing.Drawing2D.GraphicsPath
     $path.AddArc(0, 0, $r, $r, 180, 90); $path.AddArc($size - $r - 1, 0, $r, $r, 270, 90)
     $path.AddArc($size - $r - 1, $size - $r - 1, $r, $r, 0, 90); $path.AddArc(0, $size - $r - 1, $r, $r, 90, 90); $path.CloseFigure()
-    $brush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 193, 95, 60))
-    $g.FillPath($brush, $path)
-    $font = New-Object System.Drawing.Font 'Segoe MDL2 Assets', ($size * 0.5), ([System.Drawing.GraphicsUnit]::Pixel)
-    $fmt = New-Object System.Drawing.StringFormat; $fmt.Alignment = 'Center'; $fmt.LineAlignment = 'Center'
-    $g.DrawString([string][char]0xE7FC, $font, [System.Drawing.Brushes]::White, (New-Object System.Drawing.RectangleF 0, ($size * 0.04), $size, $size), $fmt)
+    $g.FillPath((New-Object System.Drawing.SolidBrush $ink), $path)
+    $g.SmoothingMode = 'None'
+    $spines = @(@(5, 14, $cream), @(13, 11, $cream), @(21, 8, $clay))
+    foreach ($s in $spines) {
+        $x = U $s[0]; $top = U $s[1]; $w = U 6; $bottom = U 24
+        $g.FillRectangle((New-Object System.Drawing.SolidBrush $s[2]), $x, $top, $w, $bottom - $top)
+        if ($size -ge 48) { $g.FillRectangle((New-Object System.Drawing.SolidBrush $ink), $x + (U 1), $top + (U 2), $w - 2 * (U 1), [Math]::Max(1, (U 1))) }
+    }
+    $g.FillRectangle((New-Object System.Drawing.SolidBrush $cream), (U 4), (U 25), (U 28) - (U 4), [Math]::Max(1, (U 2)))
     $g.Dispose()
-    $ms = New-Object System.IO.MemoryStream; $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
-    , @($size, $ms.ToArray())
+    if ($size -ge 256) { $ms = New-Object System.IO.MemoryStream; $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); $data = $ms.ToArray() }
+    else {
+        $ms = New-Object System.IO.MemoryStream; $bw = New-Object System.IO.BinaryWriter $ms
+        $bw.Write([int]40); $bw.Write([int]$size); $bw.Write([int]($size * 2)); $bw.Write([int16]1); $bw.Write([int16]32)
+        $bw.Write([int]0); $bw.Write([int]0); $bw.Write([int]0); $bw.Write([int]0); $bw.Write([int]0); $bw.Write([int]0)
+        for ($y = $size - 1; $y -ge 0; $y--) { for ($x = 0; $x -lt $size; $x++) { $px = $bmp.GetPixel($x, $y); $bw.Write([byte]$px.B); $bw.Write([byte]$px.G); $bw.Write([byte]$px.R); $bw.Write([byte]$px.A) } }
+        $bw.Write((New-Object byte[] ([int]([Math]::Ceiling($size / 32.0) * 4) * $size))); $bw.Flush(); $data = $ms.ToArray()
+    }
+    if ($size -eq 256) { $bmp.Save((Join-Path $obj 'logo-256.png'), [System.Drawing.Imaging.ImageFormat]::Png) }
+    $bmp.Dispose()
+    , @($size, $data)
 }
 $fs = [System.IO.File]::Create($ico); $w = New-Object System.IO.BinaryWriter $fs
 $w.Write([uint16]0); $w.Write([uint16]1); $w.Write([uint16]$pngs.Count)
