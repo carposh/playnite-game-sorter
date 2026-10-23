@@ -20,8 +20,8 @@ using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Game Sorter for Playnite")]
 [assembly: AssemblyProduct("Game Sorter")]
-[assembly: AssemblyVersion("2.4.0.0")]
-[assembly: AssemblyFileVersion("2.4.0.0")]
+[assembly: AssemblyVersion("2.4.1.0")]
+[assembly: AssemblyFileVersion("2.4.1.0")]
 
 namespace GameSorter
 {
@@ -161,6 +161,7 @@ namespace GameSorter
             CreateShortcut(StartMenuLink);
             if (createDesktopShortcut || File.Exists(DesktopLink)) CreateShortcut(DesktopLink);
             try { SHChangeNotify(0x08000000, 0, IntPtr.Zero, IntPtr.Zero); } catch { }
+            try { Process.Start(new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "ie4uinit.exe"), "-show") { CreateNoWindow = true, UseShellExecute = false }); } catch { }
         }
 
         static void Register()
